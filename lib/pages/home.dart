@@ -36,15 +36,14 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
-              const Center(
-                child: Text(
-                  "Готовы начать?",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w400,
-                  ),
+              const Text(
+                "Готовы начать?",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
+
               const SizedBox(height: 32),
               _actionButton(
                 context,
