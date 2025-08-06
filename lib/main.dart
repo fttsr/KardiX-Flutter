@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:kardix/pages/bluetooth_connection.dart';
+import 'package:kardix/pages/ecg.dart';
 import 'package:kardix/pages/home.dart';
 import 'package:kardix/pages/welcome.dart';
 
@@ -14,8 +16,6 @@ void main() async {
   var box = await Hive.openBox('db');
 
   runApp(MyApp());
-
-  //123
 }
 
 class MyApp extends StatelessWidget {
@@ -26,7 +26,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       theme: ThemeData(fontFamily: 'Quicksand'),
       initialRoute: '/',
-      routes: {'/': (context) => WelcomeScreen()},
+      routes: {
+        '/': (context) => WelcomeScreen(),
+        '/bluetooth': (context) => BluetoothConnectionScreen(),
+        '/ecg': (context) => EcgScreen(),
+      },
     );
   }
 }
