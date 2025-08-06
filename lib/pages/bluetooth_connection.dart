@@ -199,7 +199,7 @@ class _BluetoothConnectionScreenState
 
             // Список устройств
             const Text(
-              "Доступные устройства",
+              "Доступные устройства", 
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w500,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:kardix/pages/bluetooth_connection.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -51,7 +52,15 @@ class HomeScreen extends StatelessWidget {
                 icon: Icons.play_arrow,
                 color: const Color.fromARGB(255, 64, 103, 245),
                 textColor: Colors.white,
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          BluetoothConnectionScreen(),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 32),
 
@@ -122,6 +131,7 @@ class HomeScreen extends StatelessWidget {
       child: SizedBox(
         height: 78,
         width: 350,
+
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
