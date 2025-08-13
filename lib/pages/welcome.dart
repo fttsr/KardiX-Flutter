@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:kardix/main.dart';
-import 'package:kardix/pages/home.dart';
+import 'package:kardix_flutter/main.dart';
+import 'package:kardix_flutter/pages/home.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:kardix/pages/bluetooth_connection.dart';
+import 'package:kardix_flutter/pages/bluetooth_connection.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -148,7 +148,7 @@ class HomeScreen extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
                   color: textColor,
                 ),

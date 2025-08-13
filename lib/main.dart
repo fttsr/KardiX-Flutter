@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:kardix/pages/bluetooth_connection.dart';
-import 'package:kardix/pages/ecg.dart';
-import 'package:kardix/pages/home.dart';
-import 'package:kardix/pages/welcome.dart';
+import 'package:kardix_flutter/pages/bluetooth_connection.dart';
+import 'package:kardix_flutter/pages/ecg.dart';
+import 'package:kardix_flutter/pages/home.dart';
+import 'package:kardix_flutter/pages/welcome.dart';
+
+
 
 void main() async {
   // Гарантия плавной работы (движок готов перед выполнением операций)
