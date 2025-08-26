@@ -1,13 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:kardix_flutter/pages/bluetooth_connection.dart';
+import 'package:kardix_flutter/pages/results.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String _formatAgo(DateTime? dateTime) {
+    if (dateTime == null) return "Нет данных";
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+
+    if (diff.inMinutes < 1) return "только что";
+    if (diff.inMinutes < 60)
+      return "${diff.inMinutes} мин назад";
+    if (diff.inMinutes > 60) return "${diff.inHours}ч назад";
+    return "${diff.inDays}д назад";
+  }
 
   @override
   Widget build(BuildContext context) {
     final userName = Hive.box('db').get('userName');
+    final lastEcgTimeStr = Hive.box('db').get('lastEcgTime');
+    final lastPdfOpenTimeStr = Hive.box(
+      'db',
+    ).get('lastPdfOpenTime');
+    final lastEcgTime = lastEcgTimeStr != null
+        ? DateTime.tryParse(lastEcgTimeStr)
+        : null;
+    final lastPdfOpenTime = lastPdfOpenTimeStr != null
+        ? DateTime.tryParse(lastPdfOpenTimeStr)
+        : null;
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -23,16 +51,71 @@ class HomeScreen extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Center(
-                        child: Text(
-                          "Привет, $userName",
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      Text(
+                        userName == null ||
+                                userName
+                                    .toString()
+                                    .trim()
+                                    .isEmpty
+                            ? "Привет!"
+                            : "Привет, $userName",
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 28),
+                    onPressed: () async {
+                      final result = await showDialog<String>(
+                        context: context,
+                        builder: (context) {
+                          final controller =
+                              TextEditingController(
+                                text: userName ?? "",
+                              );
+                          return AlertDialog(
+                            title: const Text("Изменить имя"),
+                            content: TextField(
+                              controller: controller,
+                              decoration: const InputDecoration(
+                                hintText: "Введите имя",
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Hive.box(
+                                    'db',
+                                  ).delete('userName');
+                                  Navigator.of(context).pop('');
+                                },
+                                child: const Text("Сбросить"),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(
+                                    context,
+                                  ).pop(controller.text.trim());
+                                },
+                                child: const Text("Сохранить"),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                      if (result != null) {
+                        if (result.isEmpty) {
+                          Hive.box('db').delete('userName');
+                        } else {
+                          Hive.box('db').put('userName', result);
+                        }
+                        // Обновить экран
+                        (context as Element).markNeedsBuild();
+                      }
+                    },
                   ),
                 ],
               ),
@@ -52,14 +135,15 @@ class HomeScreen extends StatelessWidget {
                 icon: Icons.play_arrow,
                 color: const Color.fromARGB(255, 64, 103, 245),
                 textColor: Colors.white,
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) =>
                           BluetoothConnectionScreen(),
                     ),
                   );
+                  setState(() {});
                 },
               ),
               const SizedBox(height: 32),
@@ -69,7 +153,16 @@ class HomeScreen extends StatelessWidget {
                 title: "Предыдущие Результаты",
                 icon: Icons.manage_history,
                 color: Colors.white,
-                onPressed: () {},
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const ResultsScreen(),
+                    ),
+                  );
+                  setState(() {});
+                },
                 textColor: Colors.black,
               ),
 
@@ -100,14 +193,14 @@ class HomeScreen extends StatelessWidget {
                   _activityItem(
                     icon: Icons.check_circle,
                     title: "Выполнение процедуры",
-                    time: "2ч назад",
+                    time: _formatAgo(lastEcgTime),
                     color: Colors.green,
                   ),
                   const SizedBox(height: 16),
                   _activityItem(
                     icon: Icons.bar_chart,
                     title: "Просмотр результатов",
-                    time: "1д назад",
+                    time: _formatAgo(lastPdfOpenTime),
                     color: Color.fromARGB(255, 64, 103, 245),
                   ),
                 ],
