@@ -290,7 +290,9 @@ class _BluetoothConnectionScreenState
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => EcgScreen()),
+          MaterialPageRoute(
+            builder: (context) => EcgScreen(device: device),
+          ),
         );
       });
     } catch (e) {
@@ -311,36 +313,39 @@ class _BluetoothConnectionScreenState
 
   Widget _deviceList() {
     if (_devices.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          children: [
-            Text(
-              _connectionState == ConnectionState.active
-                  ? "Поиск кардиографа..."
-                  : "Устройства не найдены",
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            if (!_bluetoothEnabled)
-              ElevatedButton.icon(
-                icon: const Icon(Icons.bluetooth),
-                label: const Text("Включить Bluetooth"),
-                onPressed: () => openAppSettings(),
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            // mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _connectionState == ConnectionState.active
+                    ? "Поиск кардиографа..."
+                    : "Устройства не найдены",
+                style: const TextStyle(color: Colors.grey),
               ),
-            if (!_permissionsGranted)
+              const SizedBox(height: 20),
+              if (!_bluetoothEnabled)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.bluetooth),
+                  label: const Text("Включить Bluetooth"),
+                  onPressed: () => openAppSettings(),
+                ),
+              if (!_permissionsGranted)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.settings),
+                  label: const Text("Запросить разрешения"),
+                  onPressed: _requestPermissions,
+                ),
+              const SizedBox(height: 10),
               ElevatedButton.icon(
-                icon: const Icon(Icons.settings),
-                label: const Text("Запросить разрешения"),
-                onPressed: _requestPermissions,
+                icon: const Icon(Icons.refresh),
+                label: const Text("Повторить сканирование"),
+                onPressed: _startScanning,
               ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: const Text("Повторить сканирование"),
-              onPressed: _startScanning,
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
