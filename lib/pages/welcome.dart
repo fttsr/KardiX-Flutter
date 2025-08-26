@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:kardix_flutter/main.dart';
 import 'package:kardix_flutter/pages/home.dart';
 
 class WelcomeScreen extends StatefulWidget {
@@ -62,16 +61,20 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
+  void _continue() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HomeScreen(),
+      ),
+    );
+  }
+
   void _saveAndContinue() {
     final name = _nameController.text.trim();
     if (name.isNotEmpty) {
       _userBox.put('userName', name);
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
-        ),
-      );
+      _continue();
     }
   }
 
@@ -156,7 +159,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _nameController.text.trim().isEmpty
-                ? null
+                ? _continue
                 : _saveAndContinue,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue[700],
