@@ -10,6 +10,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'dart:ui' as ui;
 
+import 'package:printing/printing.dart';
+
 class EcgScreen extends StatefulWidget {
   final BluetoothDevice device;
 
@@ -38,8 +40,6 @@ class _EcgScreenState extends State<EcgScreen> {
   Timer? _countdownTimer;
 
   List<int> heartRateHistory = [];
-
-  static const double _ecgFrequency = 0.2;
 
   Future<Uint8List> _captureEcgImage() async {
     try {
@@ -101,27 +101,25 @@ class _EcgScreenState extends State<EcgScreen> {
   int _lastHeartRateUpdate = 0;
 
   void _addDemoData() {
-    _timeCounter += 0.04;
+    _timeCounter += 0.02;
 
-    double baseFreq =
-        _ecgFrequency + (_rand.nextDouble() - 0.5) * 0.05;
-    double amplitude = 1.0 + (_rand.nextDouble() - 0.5) * 0.2;
+    // Рандом ЧСС
+    int ms = DateTime.now().millisecondsSinceEpoch;
+    if (ms - _lastHeartRateUpdate > 4000 + _rand.nextInt(1000)) {
+      int delta = (_rand.nextDouble() * 6 - 3).round(); // -3..+3
+      heartRate = ((heartRate ?? 75) + delta).clamp(50, 120);
+      _lastHeartRateUpdate = ms;
+    }
+
+    // Шум
+    double amplitude = 1.0 + (_rand.nextDouble() - 0.5) * 0.15;
     double value =
-        amplitude * _generateEcgValue(_timeCounter * baseFreq) +
-        (_rand.nextDouble() - 0.5) * 0.15; // Дополнительный шум
+        amplitude * _generateEcgValue(_timeCounter) +
+        (_rand.nextDouble() - 0.5) * 0.02;
 
     setState(() {
       ecgData.add(value);
-      if (ecgData.length > 200) ecgData.removeAt(0);
-
-      int ms = DateTime.now().millisecondsSinceEpoch;
-      if (ms - _lastHeartRateUpdate >
-          1000 + _rand.nextInt(1000)) {
-        int delta = (_rand.nextDouble() * 6 - 3)
-            .round(); // -3..+3
-        heartRate = ((heartRate ?? 80) + delta).clamp(60, 120);
-        _lastHeartRateUpdate = ms;
-      }
+      if (ecgData.length > 800) ecgData.removeAt(0);
 
       // Автоскролл
       if (_scrollController.hasClients) {
@@ -132,29 +130,39 @@ class _EcgScreenState extends State<EcgScreen> {
     });
   }
 
-  double _generateEcgValue(double time) {
-    double cycleLength = 60.0 / (heartRate ?? 70);
-    double t = time % cycleLength;
+  double _generateEcgValue(double timeSec) {
+    final hr = (heartRate ?? 75).toDouble();
+    final cycleLength = 60.0 / hr;
+    final tInCycle = timeSec % cycleLength;
+    final normalizedT = tInCycle / cycleLength; // 0..1
 
-    double p = t < 0.12
-        ? 0.15 * exp(-pow((t - 0.06) * 20, 2))
-        : 0.0;
-    double q = (t >= 0.16 && t < 0.18)
-        ? -0.25 * exp(-pow((t - 0.17) * 100, 2))
-        : 0.0;
-    double rAmplitude = 0.9 + (_rand.nextDouble() * 0.2);
-    double r = (t >= 0.18 && t < 0.20)
-        ? rAmplitude * exp(-pow((t - 0.19) * 100, 2))
-        : 0.0;
-    double s = (t >= 0.20 && t < 0.22)
-        ? -0.35 * exp(-pow((t - 0.21) * 100, 2))
-        : 0.0;
-    double tWave = (t >= 0.28 && t < 0.40)
-        ? 0.25 * exp(-pow((t - 0.34) * 20, 2))
-        : 0.0;
+    // Гауссовы импульсы для имитации P, Q, R, S, T
+    double gaussian(double x, double mu, double sigma) {
+      final z = (x - mu) / sigma;
+      return exp(-0.5 * z * z);
+    }
 
-    double noise = (_rand.nextDouble() - 0.5) * 0.05;
-    return p + q + r + s + tWave + noise;
+    double value = 0.0;
+
+    // P — Начало
+    value += 0.12 * gaussian(normalizedT, 0.12, 0.03);
+
+    // Q — Перед пиком
+    value += -0.18 * gaussian(normalizedT, 0.28, 0.008);
+
+    // R — Основной пик
+    value += 1.0 * gaussian(normalizedT, 0.30, 0.006);
+
+    // S — После R
+    value += -0.22 * gaussian(normalizedT, 0.335, 0.01);
+
+    // T — В конце
+    value += 0.30 * gaussian(normalizedT, 0.6, 0.06);
+
+    // Шум
+    value += (_rand.nextDouble() - 0.5) * 0.01;
+
+    return value;
   }
 
   void _toggleRecording() {
@@ -342,6 +350,11 @@ class _EcgScreenState extends State<EcgScreen> {
       files.add(file.path);
       Hive.box('db').put('pdfFiles', files);
     }
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: fileName,
+    );
 
     await widget.device.disconnect();
 
@@ -641,7 +654,43 @@ class _EcgLinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.length < 2) return;
 
-    final paint = Paint()
+    final backgroundPaint = Paint()..color = Colors.white;
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      backgroundPaint,
+    );
+
+    final gridPaint = Paint()
+      ..color = Colors.grey[300]!
+      ..strokeWidth = 1.0;
+
+    for (double x = 0; x < size.width; x += 50) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        gridPaint,
+      );
+    }
+
+    for (double y = 0; y < size.height; y += 25) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        gridPaint,
+      );
+    }
+
+    final baselinePaint = Paint()
+      ..color = Colors.grey[500]!
+      ..strokeWidth = 1.0;
+    double baselineY = size.height / 2;
+    canvas.drawLine(
+      Offset(0, baselineY),
+      Offset(size.width, baselineY),
+      baselinePaint,
+    );
+
+    final ecgPaint = Paint()
       ..color = color
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
@@ -650,18 +699,18 @@ class _EcgLinePainter extends CustomPainter {
     final path = Path();
     final xStep = size.width / data.length;
 
-    double yScale = size.height / 3;
+    double yScale = size.height / 2.5;
 
     // Начальная точка
-    path.moveTo(0, size.height / 2 - data[0] * yScale);
+    path.moveTo(0, baselineY - data[0] * yScale);
 
     for (int i = 1; i < data.length; i++) {
       final x = i * xStep;
-      final y = size.height / 2 - data[i] * yScale;
+      final y = baselineY - data[i] * yScale;
       path.lineTo(x, y);
     }
 
-    canvas.drawPath(path, paint);
+    canvas.drawPath(path, ecgPaint);
   }
 
   @override
