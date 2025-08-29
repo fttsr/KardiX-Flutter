@@ -22,6 +22,8 @@ class EcgScreen extends StatefulWidget {
 }
 
 class _EcgScreenState extends State<EcgScreen> {
+  StreamSubscription? _deviceStateSubscription;
+
   bool _isFinished = false;
 
   final GlobalKey _ecgGraphKey = GlobalKey();
@@ -60,6 +62,39 @@ class _EcgScreenState extends State<EcgScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Подписываемся на состояние устройства
+    _deviceStateSubscription = widget.device.state.listen(
+      (dynamic state) {
+        debugPrint('[ECG] device.state -> $state');
+
+        final s = state.toString().toLowerCase();
+        if (s.contains('disconnected')) {
+          if (!_isFinished) {
+            _isFinished = true;
+
+            _ecgTimer?.cancel();
+            _countdownTimer?.cancel();
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Устройство отсоединено'),
+                ),
+              );
+
+              Future.microtask(() {
+                if (mounted && Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              });
+            }
+          }
+        }
+      },
+      onError: (e) => debugPrint('[ECG] device.state error: $e'),
+    );
+
     _startEcgMonitoring();
     _startCountdown();
   }
@@ -117,6 +152,10 @@ class _EcgScreenState extends State<EcgScreen> {
         amplitude * _generateEcgValue(_timeCounter) +
         (_rand.nextDouble() - 0.5) * 0.02;
 
+    while (ecgData.length > 0 && !ecgData.first.isFinite) {
+      ecgData.removeAt(0);
+    }
+
     setState(() {
       ecgData.add(value);
       if (ecgData.length > 800) ecgData.removeAt(0);
@@ -170,12 +209,15 @@ class _EcgScreenState extends State<EcgScreen> {
       isRecording = !isRecording;
       if (isRecording) {
         _recordingTimer.start();
+        _timeCounter = 0.0;
+
         _ecgTimer = Timer.periodic(
           const Duration(milliseconds: 40),
           (timer) {
             _addDemoData();
           },
         );
+
         _countdownTimer?.cancel();
         _countdownTimer = Timer.periodic(
           const Duration(seconds: 1),
@@ -198,7 +240,9 @@ class _EcgScreenState extends State<EcgScreen> {
           },
         );
       } else {
+        // Пауза — вставляем визуальный разрыв
         _recordingTimer.stop();
+        _insertPauseGap(gapLength: 80);
         _ecgTimer?.cancel();
         _countdownTimer?.cancel();
       }
@@ -216,6 +260,20 @@ class _EcgScreenState extends State<EcgScreen> {
     final fileName = 'heart_rate_table_$dateStr$timeStr.pdf';
 
     final ecgImageBytes = await _captureEcgImage();
+
+    // Проверяем, что изображение было успешно захвачено
+    if (ecgImageBytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Ошибка: не удалось захватить изображение ЭКГ',
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     final tableRows = <pw.TableRow>[
       pw.TableRow(
@@ -259,6 +317,7 @@ class _EcgScreenState extends State<EcgScreen> {
       );
     }
 
+    // Добавляем страницу с таблицей и графиком ЭКГ
     pdf.addPage(
       pw.Page(
         build: (pw.Context context) {
@@ -356,11 +415,15 @@ class _EcgScreenState extends State<EcgScreen> {
       filename: fileName,
     );
 
-    await widget.device.disconnect();
-
     setState(() {
       _isFinished = true;
     });
+
+    await widget.device.disconnect();
+
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
   }
 
   void _saveResults() async {
@@ -381,9 +444,14 @@ class _EcgScreenState extends State<EcgScreen> {
   void dispose() {
     _ecgTimer?.cancel();
     _countdownTimer?.cancel();
+    _deviceStateSubscription?.cancel();
 
     if (!_isFinished) {
-      widget.device.disconnect();
+      try {
+        widget.device.disconnect();
+      } catch (e) {
+        debugPrint('Ошибка отключения от кардиографа $e');
+      }
     }
 
     super.dispose();
@@ -569,6 +637,21 @@ class _EcgScreenState extends State<EcgScreen> {
     );
   }
 
+  void _insertPauseGap({int gapLength = 80}) {
+    setState(() {
+      for (int i = 0; i < gapLength; i++) {
+        ecgData.add(0.0);
+      }
+      while (ecgData.length > 800) ecgData.removeAt(0);
+    });
+
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(
+        _scrollController.position.maxScrollExtent,
+      );
+    }
+  }
+
   Widget _buildControls(String recordingTime) {
     return Container(
       decoration: BoxDecoration(
@@ -652,7 +735,7 @@ class _EcgLinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.length < 2) return;
+    if (data.isEmpty) return;
 
     final backgroundPaint = Paint()..color = Colors.white;
     canvas.drawRect(
@@ -683,7 +766,7 @@ class _EcgLinePainter extends CustomPainter {
     final baselinePaint = Paint()
       ..color = Colors.grey[500]!
       ..strokeWidth = 1.0;
-    double baselineY = size.height / 2;
+    final double baselineY = size.height / 2;
     canvas.drawLine(
       Offset(0, baselineY),
       Offset(size.width, baselineY),
@@ -696,21 +779,36 @@ class _EcgLinePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    final path = Path();
-    final xStep = size.width / data.length;
+    final Path path = Path();
+    final double xStep = data.length > 1
+        ? size.width / (data.length - 1)
+        : size.width;
+    final double yScale = size.height / 2.5;
 
-    double yScale = size.height / 2.5;
+    bool started = false;
 
-    // Начальная точка
-    path.moveTo(0, baselineY - data[0] * yScale);
+    for (int i = 0; i < data.length; i++) {
+      final d = data[i];
+      if (d == null || !d.isFinite) {
+        // разрыв: не продолжаем путь
+        started = false;
+        continue;
+      }
 
-    for (int i = 1; i < data.length; i++) {
-      final x = i * xStep;
-      final y = baselineY - data[i] * yScale;
-      path.lineTo(x, y);
+      final double x = i * xStep;
+      final double y = baselineY - d * yScale;
+
+      if (!started) {
+        path.moveTo(x, y);
+        started = true;
+      } else {
+        path.lineTo(x, y);
+      }
     }
 
-    canvas.drawPath(path, ecgPaint);
+    if (started) {
+      canvas.drawPath(path, ecgPaint);
+    }
   }
 
   @override
